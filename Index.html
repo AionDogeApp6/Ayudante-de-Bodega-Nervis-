@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayudante de Bodega Nervis</title>
+    <style>
+        :root { --danger: #e74c3c; --warning: #f1c40f; --success: #2ecc71; --dark: #2c3e50; --blue: #3498db; --purple: #9b59b6; --grey: #95a5a6; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 10px; font-size: 13px; color: var(--dark); }
+        .container { max-width: 800px; margin: auto; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        
+        .panel { background: #ebf5fb; padding: 12px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #aed6f1; }
+        .admin-panel { background: #f4ecf7; border-color: #d2b4de; display: none; }
+        
+        .grid-admin { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        input, select { padding: 8px; border: 1px solid #ddd; border-radius: 5px; width: 100%; box-sizing: border-box; font-size: 12px; }
+        
+        .item-row { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .col-prod { flex: 2; } 
+        .col-stock { flex: 1.2; text-align: center; font-size: 11px; } 
+        .col-venta { flex: 1.5; text-align: right; }
+        
+        .stock-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        
+        .btn { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 12px; }
+        .btn-blue { background: var(--blue); color: white; width: 100%; }
+        .btn-purple { background: var(--purple); color: white; margin-bottom: 10px; width: 100%; }
+        .btn-success { background: var(--success); color: white; width: 100%; padding: 15px; font-size: 1.2em; border-radius: 10px; }
+        .btn-danger { background: var(--danger); color: white; font-size: 10px; padding: 4px; margin-left: 5px; }
+        .btn-grey { background: var(--grey); color: white; margin-top: 5px; }
+
+        .pago-box { border: 2px dashed var(--blue); padding: 12px; margin-top: 15px; border-radius: 10px; background: #fff; }
+        .footer-fixed { position: sticky; bottom: 0; background: white; padding: 15px; border-top: 4px solid var(--dark); z-index: 100; }
+        .backup-section { border-top: 1px solid #ccc; margin-top: 15px; padding-top: 10px; display: flex; gap: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align:center; margin-bottom:5px; color:var(--dark);">Ayudante de Bodega Nervis</h2>
+    
+    <button class="btn btn-purple" onclick="toggleAdmin()">⚙️ Panel de Gestión de Inventario</button>
+
+    <div id="adminPanel" class="panel admin-panel">
+        <h4>Añadir / Cargar Producto</h4>
+        <div class="grid-admin">
+            <input type="text" id="newNombre" placeholder="Producto">
+            <input type="number" id="newPrecio" placeholder="Precio $">
+            <input type="number" id="newStock" placeholder="Stock">
+            <select id="newUnidad">
+                <option value="Und">Unidad</option>
+                <option value="Kg">Kilogramos</option>
+                <option value="L">Litros</option>
+            </select>
+        </div>
+        <button class="btn btn-blue" onclick="agregarProducto()">+ Registrar en Inventario</button>
+
+        <div class="backup-section">
+            <button class="btn btn-grey" onclick="descargarRespaldo()" style="flex:1;">📥 Guardar Respaldo</button>
+            <button class="btn btn-grey" onclick="document.getElementById('importFile').click()" style="flex:1;">📤 Cargar Respaldo</button>
+            <input type="file" id="importFile" style="display:none" onchange="cargarRespaldo(event)">
+        </div>
+        <p style="font-size:9px; color:#777; margin-top:5px; text-align:center;">Usa el respaldo para pasar tus datos a otro equipo o PC.</p>
+    </div>
+
+    <div class="panel" style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+        <div>Tasa BCV: <input type="number" id="tasa" value="0.00" step="0.01" oninput="calcular()" style="width:75px;"> <small id="status-tasa"></small></div>
+        <div style="text-align:right;"><input type="text" id="buscador" onkeyup="filtrar()" style="width:110px;" placeholder="🔍 Buscar..."></div>
+    </div>
+
+    <div id="lista"></div>
+
+    <div class="pago-box">
+        <strong>Banco:</strong> <span contenteditable="true" id="p-banco" onblur="savePay()">18861 481 Venezuela</span><br>
+        <strong>Pago Móvil:</strong> <span contenteditable="true" id="p-tlf" onblur="savePay()">0414 5834403</span>
+    </div>
+
+    <div class="footer-fixed">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-weight:bold;">
+            <span>USD: <span id="resUSD" style="color:var(--blue)">0.00</span></span>
+            <span>Bs: <span id="resBS" style="color:var(--success)">0.00</span></span>
+        </div>
+        <button class="btn btn-success" onclick="procesarPago()">CONFIRMAR VENTA / DESCONTAR</button>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY = 'bodega_nervis_v2';
+    let productos = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+    function toggleAdmin() {
+        const p = document.getElementById('adminPanel');
+        p.style.display = p.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function agregarProducto() {
+        const n = document.getElementById('newNombre').value;
+        const p = parseFloat(document.getElementById('newPrecio').value);
+        const s = parseFloat(document.getElementById('newStock').value);
+        const u = document.getElementById('newUnidad').value;
+
+        if(n && !isNaN(p) && !isNaN(s)) {
+            productos.push({n, p, s, u});
+            saveAndRender();
+            document.getElementById('newNombre').value = '';
+            document.getElementById('newPrecio').value = '';
+            document.getElementById('newStock').value = '';
+        }
+    }
+
+    function descargarRespaldo() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(productos));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "respaldo_bodega_nervis.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+
+    function cargarRespaldo(event) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if(Array.isArray(imported)) {
+                    productos = imported;
+                    saveAndRender();
+                    alert("Respaldo cargado con éxito.");
+                }
+            } catch(err) { alert("Error al leer el archivo."); }
+        };
+        reader.readAsText(event.target.files[0]);
+    }
+
+    function saveAndRender() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(productos));
+        renderizar();
+    }
+
+    function renderizar() {
+        const container = document.getElementById('lista');
+        container.innerHTML = '';
+        productos.forEach((prod, i) => {
+            const row = document.createElement('div');
+            row.className = 'item-row';
+            row.innerHTML = `
+                <div class="col-prod">
+                    <span class="stock-indicator" style="background:${prod.s<=0?'var(--danger)':prod.s<2?'var(--warning)':'var(--success)'}"></span>
+                    <strong>${prod.n}</strong> <small style="color:#888">(${prod.u})</small><br>
+                    $ <input type="number" value="${prod.p}" step="0.01" style="width:50px; font-size:11px;" oninput="updatePrice(${i}, this.value)">
+                    <button class="btn-danger" onclick="eliminarProducto(${i})">X</button>
+                </div>
+                <div class="col-stock">
+                    <span style="font-weight:bold">${prod.s.toFixed(2)}</span><br>
+                    <button class="btn" style="background:#eee; font-size:9px; padding:2px;" onclick="sumarStock(${i})">+ Cargar</button>
+                </div>
+                <div class="col-venta">
+                    <input type="number" id="vta-${i}" placeholder="Cant" step="0.01" style="width:55px;" oninput="calcular()">
+                    <select id="uni-vta-${i}" style="width:45px; font-size:9px;" onchange="calcular()">
+                        ${getVentaOptions(prod.u)}
+                    </select>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+        calcular();
+    }
+
+    function getVentaOptions(u) {
+        if(u === "Kg") return `<option value="Kg">Kg</option><option value="g">g</option>`;
+        if(u === "L") return `<option value="L">L</option><option value="ml">ml</option>`;
+        return `<option value="Und">Und</option>`;
+    }
+
+    function sumarStock(i) {
+        const cant = parseFloat(prompt("¿Cantidad a añadir?"));
+        if(!isNaN(cant)) { productos[i].s += cant; saveAndRender(); }
+    }
+
+    function eliminarProducto(index) {
+        if(confirm("¿Eliminar producto?")) { productos.splice(index, 1); saveAndRender(); }
+    }
+
+    function updatePrice(i, val) {
+        productos[i].p = parseFloat(val) || 0;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(productos));
+        calcular();
+    }
+
+    function calcular() {
+        let tUSD = 0;
+        const tasa = parseFloat(document.getElementById('tasa').value) || 0;
+        productos.forEach((p, i) => {
+            let cant = parseFloat(document.getElementById(`vta-${i}`).value) || 0;
+            const uniVta = document.getElementById(`uni-vta-${i}`).value;
+            let cantPrecio = (uniVta === "g" || uniVta === "ml") ? cant / 1000 : cant;
+            tUSD += cantPrecio * p.p;
+        });
+        document.getElementById('resUSD').innerText = tUSD.toFixed(2);
+        document.getElementById('resBS').innerText = (tUSD * tasa).toLocaleString('es-VE', {minimumFractionDigits:2});
+    }
+
+    function procesarPago() {
+        let hubo = false;
+        productos.forEach((p, i) => {
+            let cant = parseFloat(document.getElementById(`vta-${i}`).value) || 0;
+            const uniVta = document.getElementById(`uni-vta-${i}`).value;
+            if(cant > 0) {
+                if(uniVta === "g" || uniVta === "ml") cant = cant / 1000;
+                p.s = Math.max(0, p.s - cant);
+                document.getElementById(`vta-${i}`).value = '';
+                hubo = true;
+            }
+        });
+        if(hubo) { saveAndRender(); alert("Venta Exitosa."); }
+    }
+
+    async function getTasa() {
+        try {
+            const res = await fetch('https://ve.dolarapi.com/v1/dolares/oficial');
+            const data = await res.json();
+            document.getElementById('tasa').value = data.promedio;
+            document.getElementById('status-tasa').innerText = "✅ BCV";
+            calcular();
+        } catch(e) { document.getElementById('status-tasa').innerText = "⚠️ Manual"; }
+    }
+
+    function savePay() {
+        localStorage.setItem('p_nervis_b', document.getElementById('p-banco').innerText);
+        localStorage.setItem('p_nervis_t', document.getElementById('p-tlf').innerText);
+    }
+
+    function filtrar() {
+        const b = document.getElementById('buscador').value.toLowerCase();
+        document.querySelectorAll('.item-row').forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(b) ? 'flex' : 'none';
+        });
+    }
+
+    window.onload = () => {
+        const b = localStorage.getItem('p_nervis_b');
+        const t = localStorage.getItem('p_nervis_t');
+        if(b) document.getElementById('p-banco').innerText = b;
+        if(t) document.getElementById('p-tlf').innerText = t;
+        renderizar(); getTasa();
+    };
+</script>
+</body>
+</html>
