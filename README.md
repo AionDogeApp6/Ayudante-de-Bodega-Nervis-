@@ -40,4 +40,4 @@ Esta herramienta permite gestionar ventas multimoneda, controlar existencias de 
 Desarrollado por **Nervis Enrique Tovar** (Renderizado Móvil).  
 *Proyecto creado para potenciar la eficiencia en el comercio de alimentos y bodegas locales, almacenes y cualquier tipo de comercio que gestione inventario*
 # 📦 Ayudante de Bodega Nervis):
-![Estado](https://img.shields.io/badge/Versi%33n-2.0-blue?style=for-the-badge)![Licencia](https://img.shields.io/badge/Uso-Libre-green?style=for-the-badge)
+![Estado](AionDogeApp6);(https://img.shields.io/badge/Versi%33n-2.0-blue?style=for-the-badge)![Licencia](https://img.shields.io/badge/Uso-Libre-green?style=for-the-badge)
